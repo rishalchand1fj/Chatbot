@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Chatbot Portal</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="shell">
+    <header>
+        <div>
+            <div class="eyebrow">ITC245</div>
+            <h1>Student Chatbot Portal</h1>
+            <p>Select a student's chatbot and start chatting.</p>
+        </div>
+    </header>
+
+    <main>
+        <section id="selectorView" class="panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Choose a chatbot</h2>
+                    <p>Any <code>.py</code> file placed in the <code>chatbots</code> folder appears here automatically.</p>
+                </div>
+                <button class="secondary" onclick="refreshBots()">Refresh list</button>
+            </div>
+            <div id="botGrid" class="bot-grid"></div>
+        </section>
+
+        <section id="chatView" class="panel chat-panel hidden">
+            <div class="chat-header">
+                <div class="chat-identity">
+                    <div id="chatAvatar" class="avatar">C</div>
+                    <div>
+                        <h2 id="chatName">Chatbot</h2>
+                        <p><span class="online-dot"></span> Running</p>
+                    </div>
+                </div>
+                <button class="danger" onclick="closeChat()">Close Chat</button>
+            </div>
+            <div id="messages" class="messages"></div>
+            <form id="chatForm" class="composer">
+                <input id="messageInput" type="text" placeholder="Type your message..." autocomplete="off">
+                <button type="submit" class="primary">Send</button>
+            </form>
+        </section>
+    </main>
+
+    <footer>To add another student, place their Python chatbot file inside <code>chatbots/</code>, then click <strong>Refresh list</strong>.</footer>
+</div>
+
+<script>
+const selectorView = document.getElementById('selectorView');
+const chatView = document.getElementById('chatView');
+const messages = document.getElementById('messages');
+const chatForm = document.getElementById('chatForm');
+const messageInput = document.getElementById('messageInput');
+const chatName = document.getElementById('chatName');
+const chatAvatar = document.getElementById('chatAvatar');
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[ch]));
+}
+
+function addMessage(text, who) {
+    if (!text) return;
+    const row = document.createElement('div');
+    row.className = `message ${who}`;
+    row.innerHTML = `<div class="bubble">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
+    messages.appendChild(row);
+    messages.scrollTop = messages.scrollHeight;
+}
+
+async function refreshBots() {
+    const grid = document.getElementById('botGrid');
+    try {
+        const res = await fetch('/api/chatbots');
+        const bots = await res.json();
+        if (!bots.length) {
+            grid.innerHTML = '<div class="empty">No chatbot files found. Add a Python file to the <code>chatbots</code> folder.</div>';
+            return;
+        }
+        grid.innerHTML = bots.map(bot => `
+            <button class="bot-card" data-bot-id="${escapeHtml(bot.id)}" onclick="startBot(this.dataset.botId)">
+                <div class="avatar">${escapeHtml(bot.name.charAt(0).toUpperCase())}</div>
+                <div><strong>${escapeHtml(bot.name)}</strong><span>Open chatbot</span></div>
+            </button>`).join('');
+    } catch (e) {
+        grid.innerHTML = '<div class="empty">Could not load chatbot list.</div>';
+    }
+}
+
+async function startBot(botId) {
+    const res = await fetch('/api/start', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({bot_id: botId})
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Unable to start chatbot.'); return; }
+    messages.innerHTML = '';
+    chatName.textContent = data.name;
+    chatAvatar.textContent = data.name.charAt(0).toUpperCase();
+    selectorView.classList.add('hidden');
+    chatView.classList.remove('hidden');
+    addMessage(data.message, 'bot');
+    messageInput.focus();
+}
+
+chatForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const text = messageInput.value;
+    if (!text.trim()) return;
+    addMessage(text, 'user');
+    messageInput.value = '';
+    messageInput.disabled = true;
+    try {
+        const res = await fetch('/api/message', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({message: text})
+        });
+        const data = await res.json();
+        if (!res.ok) addMessage(data.error || 'Something went wrong.', 'bot');
+        else {
+            addMessage(data.message || '(No text response)', 'bot');
+            if (data.status === 'ended') addMessage('The chatbot has closed. Use Close Chat to return to the selection screen.', 'system');
+        }
+    } catch (e) {
+        addMessage('Could not connect to the chatbot server.', 'bot');
+    } finally {
+        messageInput.disabled = false;
+        messageInput.focus();
+    }
+});
+
+async function closeChat() {
+    await fetch('/api/close', {method: 'POST'});
+    chatView.classList.add('hidden');
+    selectorView.classList.remove('hidden');
+    messages.innerHTML = '';
+    refreshBots();
+}
+
+refreshBots();
+</script>
+</body>
+</html>
