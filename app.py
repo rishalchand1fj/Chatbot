@@ -264,7 +264,7 @@ bots = available_chatbots()
 st.markdown("""
 <div class="portal-header">
     <div class="eyebrow">ITC245</div>
-    <h1>Student Chatbot Portal</h1>
+    <h1>Students Chatbot Portal - Made by Rishal</h1>
     <p>Select a student's chatbot and start chatting.</p>
 </div>
 """, unsafe_allow_html=True)
